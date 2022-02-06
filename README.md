@@ -3,7 +3,7 @@ An R implementation of the ZipHiC as described in "ZipHiC: a novel Bayesian fram
 
 Note that this works on Linux or MacOS or Windows systems. For genome-wide analysis, the function can be run in parallel computing, by dividing into sub-matrices and specify the number of cores to use.
 
-The run_metropolis_MCMC_betas function generates the interaction parameter in the Potts model, the posterior means and MCMC chains of each components.
+The run_metropolis_MCMC_betas function generates the calculated estimates of the interaction parameter in the Potts model, the posterior means and MCMC chains of each components, and the labelling information.
 
 Wu, F.Y. (1982). The potts model. Reviews of Modern Physics, 54(1), 235.
 Mark A. Beaumont, Jean-Marie Cornuet, Jean-Michel Marin, Christian P. Robert. Adaptive approximate Bayesian computation. Biometrika, Volume 96, Issue 4, December 2009, Pages 983–990, https://doi.org/10.1093/biomet/asp052
