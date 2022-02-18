@@ -660,7 +660,7 @@ x444=log(sim_data$Acc+1)
 
 
 #####convert into a matrix		     
-]as=split(x111, ceiling(seq_along(x111)/(N*N)))
+as=split(x111, ceiling(seq_along(x111)/(N*N)))
 ab=split(x222, ceiling(seq_along(x222)/(N*N)))
 ac=split(x333, ceiling(seq_along(x333)/(N*N)))
 ad=split(x444, ceiling(seq_along(x444)/(N*N)))
