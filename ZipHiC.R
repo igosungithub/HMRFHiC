@@ -644,7 +644,7 @@ run_metropolis_MCMC_betas <- function(N,startvalue_betas1,startvalue_betas2,star
       }
     }
   }
-  return(list(chain1,chain2,chain3,chain,z,theta))
+  return(list(chain1,chain2,chain3))
   
 }
 
