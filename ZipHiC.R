@@ -1,4 +1,4 @@
-
+######### Note that present version of the code needs users input, e.g the priors,proposals,etc, but new updated version will require very minimal input from users########### 
 library(parallel)
 #2D Neighbours for the sufficient statistic in the potts model
 Neighbours<-function(potts_data,N){
