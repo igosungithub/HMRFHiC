@@ -648,7 +648,7 @@ startvalue_betas2=as.data.frame(startvalue_betas2)
 startvalue_betas3=as.data.frame(startvalue_betas3)
 
 		     #####run the chain###########
-chain_betas = mcmapply(run_metropolis_MCMC_betas,N,startvalue_betas1,startvalue_betas2,startvalue_betas3, gamma_prior, 20000, a, b,c,d,y_sim1, thetap=0.5, SIMPLIFY = F, mc.cores=1)
+chain_betas= mcmapply(run_metropolis_MCMC_betas,N,startvalue_betas1,startvalue_betas2,startvalue_betas3, gamma_prior, 20000, a, b,c,d,y_sim1, thetap=0.5, SIMPLIFY = F, mc.cores=1)
 
 
 
