@@ -251,7 +251,7 @@ prior2 <- function(param2,y,x111,x222,x333,x444,z){
 
   inversesdy2=rgamma(1,(200-1)/2,2000)
   sdy2=1/inversesdy2
-  meany2=rnorm(1,100,sd(y2)/5000)
+  meany2=rnorm(1,200,sd(y2)/5000)
   
   inversesdx1=rgamma(1,(length(x1)-1)/2,(sum((x1-mean(x1))^2)/2))
   sdx1=1/inversesdx1
@@ -296,7 +296,7 @@ prior3 <- function(param3,y,x111,x222,x333,x444,z){
   
   inversesdy3=rgamma(1,(50000-1)/2,5000)
   sdy3=1/inversesdy3
-  meany3=rnorm(1,100,sd(y3)/7000)
+  meany3=rnorm(1,700,sd(y3)/7000)
   
   inversesdx1=rgamma(1,(length(x1)-1)/2,(sum((x1-mean(x1))^2)/2))
   sdx1=1/inversesdx1
