@@ -51,4 +51,4 @@ myresult$prob3<-as.vector(prob33)
 myresult$prob3[is.na(myresult$prob3)]<-0
 
 myresult$Z2<-rep(0,nrow(myresult))
-myresult$Z2[myresult$prob2>=0.9]<-1
+myresult$Z2[myresult$prob2>=0.9]<-1  #####the probability can be changed either to a lower value or higher value to determine the certainty of the interacting pair 
