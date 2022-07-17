@@ -391,7 +391,7 @@ prior3 <- function(param3,y,x111,x222,x333,x444,z){
     
     
     aprodensity1 = dgamma(a1,1, 0.1, log=T)
-    bprodensity1 = dnorm(b1, mean = 0.1, sd = 0.01, log=T)
+    bprodensity1 = dnorm(b1, mean = 0.15, sd = 0.01, log=T)
     cprodensity1 = dnorm(c1, 0.2, 0.01,log = T)
     dprodensity1 = dnorm(d1, mean=0, sd=0.01,log = T)
     eprodensity1 = dnorm(e1, mean = 0.1, sd = 0.01, log = T)
