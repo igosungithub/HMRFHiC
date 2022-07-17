@@ -646,9 +646,10 @@ startvalue_betas3 = c(1,1,0,1,1)
 startvalue_betas1=as.data.frame(startvalue_betas1)
 startvalue_betas2=as.data.frame(startvalue_betas2)
 startvalue_betas3=as.data.frame(startvalue_betas3)
-
+n_cores=1 ######specify number of cores to use
+iteractions=20000
+thetap=0.6 ######initial value of the extra zero probability parameter in ZIP
 		     #####run the chain###########
-chain_betas= mcmapply(run_metropolis_MCMC_betas,N,startvalue_betas1,startvalue_betas2,startvalue_betas3, gamma_prior, 20000, a, b,c,d,y_sim1, thetap=0.5, SIMPLIFY = F, mc.cores=1)
-
+chain_betas = mcmapply(run_metropolis_MCMC_betas,N,startvalue_betas1,startvalue_betas2,startvalue_betas3, gamma_prior, iterations, a, b,c,d,y_sim1, thetap, SIMPLIFY = F, mc.cores=n_cores)
 
 
