@@ -52,5 +52,3 @@ myresult$prob3[is.na(myresult$prob3)]<-0
 
 myresult$Z2<-rep(0,nrow(myresult))
 myresult$Z2[myresult$prob2>=0.9]<-1
-myresult$Z3<-rep(0,nrow(myresult))
-myresult$Z3[myresult$prob3>=0.9]<-1
