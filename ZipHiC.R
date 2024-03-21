@@ -499,7 +499,7 @@ y_sim1=y1[c(1)]
 thetap=0.6
 
 gamma_prior=rbeta(1,10,5)
-iteration=20000
+iterations=20000
 
  #####run the chain###########
 chain_betas1 = mcmapply(
