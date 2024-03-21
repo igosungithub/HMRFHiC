@@ -1,8 +1,7 @@
 mysample=cbind(sample_data$start.i., sample_data$end.j., sample_data$distance, sample_data$interaction)
 mysample=as.data.frame(mysample)
 
-burnin=10000
-iterations=20000
+burnin=(iterations/2)
 
 intercept_1=mean(chain_betas1[[1]][["chains"]][[1]][burnin:iterations,1])
 distance_1=mean(chain_betas1[[1]][["chains"]][[1]][burnin:iterations,2])
