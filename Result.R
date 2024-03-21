@@ -26,24 +26,7 @@ lambda_1<-((intercept_1) +(distance_1)*(x111) + (GC_1)*(x222) + (TES_1)*(x333) +
 lambda_2<-((intercept_2) +(distance_2)*(x111) + (GC_2)*(x222) + (TES_2)*(x333) + (ACC_2)*(x444))
 lambda_3<-((intercept_3) +(distance_3)*(x111) + (GC_3)*(x222) + (TES_3)*(x333) + (ACC_3)*(x444))
 
-#####ZIP function for the output
-prob_zip <- function(y_dat, lambda, theta) {
-    # Initialize variable to store log probability
-    log_prob <- numeric(length(y_dat))
-    
-    # Calculate log probability for y_dat == 0
-    log_prob[y_dat == 0] <- log(theta + (1 - theta) * exp(dpois(0, lambda = exp(lambda[y_dat == 0]), log = TRUE)))
-    
-    # Calculate log probability for y_dat > 0
-    if (any(y_dat > 0)) {
-        log_prob[y_dat > 0] <- log(1 - theta) + dpois(y_dat[y_dat > 0], lambda = exp(lambda[y_dat > 0]), log = TRUE)
-    }
-    
-    return(log_prob)
-}
-
-
-prob1=prob_zip(y_dat,lambda_1,theta)
+prob1=dpois(y_dat,exp(lambda_1),log=T)
 prob2=dpois(y_dat,exp(lambda_2),log=T)
 prob3=dpois(y_dat,exp(lambda_3),log=T)
 
