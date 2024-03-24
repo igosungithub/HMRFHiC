@@ -506,7 +506,7 @@ chain_betas1 = mcmapply(
   FUN = run_metropolis_MCMC_betas,
   N = rep(N, 1),  # Assuming 'times' is the number of times you want to run the function
   gamma_prior = rep(gamma_prior, 1),
-  iterations = rep(iteration, 1),
+  iterations = rep(iterations, 1),
   MoreArgs = list(
     x_vars = list(x1 = a, x2 = b, x3 = c, x4 = d),
     y = y_sim1[[1]],
