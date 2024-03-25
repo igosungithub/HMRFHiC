@@ -173,20 +173,21 @@ posterior_combined <- function(pred_combined, params, z, y, x_vars, component, t
 
 # Combined proposal function for different components
 proposal_function_combined <- function(params, component){
-  # Define standard deviations for each component
-  sd_values = list(
-    component1 = c(0.07, 0.5, 0.05, 0.05, 0.1),
-    component2 = c(0.07, 0.05, 0.05, 0.05, 0.01),
-    component3 = c(0.7, 0.02, 0.07, 0.07, 0.07)
-  )
-  
-  # Select the appropriate standard deviations
-  selected_sd = sd_values[[paste0("component", component)]]
-  
-  # Generate and return the new proposal
-  new_proposal = rnorm(5, mean = params, sd = selected_sd)
-  return(new_proposal)
+    # Define standard deviations for each component
+    sd_values = list(
+        component1 = c(0.007, 0.05, 0.005, 0.05, 0.01),
+        component2 = c(7, 0.5, 0.5, 0.5, 0.1),
+        component3 = c(0.7, 0.02, 0.07, 0.07, 0.07)
+    )
+    
+    # Select the appropriate standard deviations
+    selected_sd = sd_values[[paste0("component", component)]]
+    
+    # Generate and return the new proposal
+    new_proposal = rnorm(5, mean = params, sd = selected_sd)
+    return(new_proposal)
 }
+
 
 # Combined proposal density function for different components
 proposaldensity_combined <- function(params, component){
