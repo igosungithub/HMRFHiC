@@ -669,4 +669,23 @@ chain_betas1 = mcmapply(
   SIMPLIFY = FALSE,
   mc.cores = 1  # Or set to the desired number of cores
 )
+
+
+
+#########Example of how to specify the prior in the user_fixed_prior option############
+user_fixed_priors <- list(
+  component1 = list(
+    meany = 3, meanx1 = 8, meanx2 = 0.3, meanx3 = 1, meanx4 = 4,
+    sdy = 1, sdx1 = 1, sdx2 = 1, sdx3 = 2, sdx4 = 5
+  ),
+  component2 = list(
+    meany = 800, meanx1 = 8, meanx2 = 0.3, meanx3 = 1, meanx4 = 4,
+    sdy = 1, sdx1 = 1, sdx2 = 1, sdx3 = 2, sdx4 = 2
+  ),
+  component3 = list(
+    meany = 200, meanx1 = 10, meanx2 = 0.3, meanx3 = 1.6, meanx4 = 4.5,
+    sdy = 100, sdx1 = 6, sdx2 = 1, sdx3 = 2, sdx4 = 2
+  )
+)
+
 		    
