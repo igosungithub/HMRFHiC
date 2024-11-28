@@ -337,7 +337,7 @@ pz_123 <- function(z, sum_neighbours, y, pred_combined, chains, chain_gamma, x_v
 
 
 
-run_metropolis_MCMC_betas <- function(N, gamma_prior, iterations, x_vars, y, theta_start,use_data_priors, user_fixed_priors,epsilon=NULL, epsilon_quantile = 0.01, distance_metric = "manhattan", adaptive_epsilon = TRUE, epsilon_history = NULL) {
+run_metropolis_MCMC_betas <- function(N, gamma_prior, iterations, x_vars, y, theta_start,use_data_priors, user_fixed_priors,epsilon=NULL, epsilon_quantile = 0.01, distance_metric = "manhattan", adaptive_epsilon = TRUE) {
   # Check and convert y and x_vars to lists if they are single matrices
   #y<-y_sim1[[1]]
   #print(dim(y))
@@ -649,6 +649,7 @@ gamma_prior=rbeta(1,10,5)
 iterations=20000
 
  #####run the chain###########
+#####run the chain###########
 chain_betas1 = mcmapply(
   FUN = run_metropolis_MCMC_betas,
   N = rep(N, 1),  # Assuming 'times' is the number of times you want to run the function
@@ -657,7 +658,13 @@ chain_betas1 = mcmapply(
   MoreArgs = list(
     x_vars = list(x1 = a, x2 = b, x3 = c, x4 = d),
     y = y_sim1[[1]],
-    theta_start = thetap
+    theta_start = thetap,
+    use_data_priors=TRUE, 
+    user_fixed_priors=0,
+    epsilon = NULL,
+    epsilon_quantile = 0.01, 
+    distance_metric = "manhattan", 
+    adaptive_epsilon = TRUE
   ),
   SIMPLIFY = FALSE,
   mc.cores = 1  # Or set to the desired number of cores
