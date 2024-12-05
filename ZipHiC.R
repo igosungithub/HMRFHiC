@@ -1,96 +1,49 @@
 ######### Note that present version of the code may require users input, e.g certain parts of the priors, the proposals,etc., but new updated version in the next couple of weeks will require very minimal input from users########### 
+library(RcppArmadillo)
 library(parallel)
-#2D Neighbours for the sufficient statistic in the potts model
-# Combined function for 2D Neighbours in the Potts model
-Neighbours_combined <- function(potts_data, N, proposed_value = NULL){
-  is_proposed <- !is.null(proposed_value)
-  
-  # Function to create shifted matrices
-  shift_matrix <- function(data, shift_direction, N) {
-    # Initialize the shifted matrix with the same dimension as data
-    shifted = matrix(0, nrow = N, ncol = N)
-    
-    if (shift_direction == "down") {
-      shifted[2:N, ] = data[1:(N-1), ]
-    } else if (shift_direction == "up") {
-      shifted[1:(N-1), ] = data[2:N, ]
-    } else if (shift_direction == "right") {
-      shifted[, 2:N] = data[, 1:(N-1)]
-    } else if (shift_direction == "left") {
-      shifted[, 1:(N-1)] = data[, 2:N]
-    }
-    
-    return(shifted)
-  }
-  
-  
-  # Initialize matrices
-  mydata1 = shift_matrix(potts_data, if (is_proposed) "up" else "down", N)
-  compare_matrix1 = if (is_proposed) proposed_value else mydata1
-  
-  # Compute neighbour relationships
-  compute_neighbours <- function(data1, compare_matrix, N) {
-    comparison_result = (data1 == compare_matrix)
-    result_indices = which(comparison_result, arr.ind = TRUE)
-    result_matrix = matrix(0, N, N)
-    result_matrix[result_indices] <- 1
-    return(result_matrix)
-  }
-  
-  neighbour1 = compute_neighbours(mydata1, compare_matrix1, N)
-  neighbour2 = compute_neighbours(shift_matrix(potts_data, if (is_proposed) "down" else "up", N), if (is_proposed) proposed_value else neighbour1, N)
-  neighbour3 = compute_neighbours(shift_matrix(potts_data, if (is_proposed) "left" else "right", N), if (is_proposed) proposed_value else neighbour1, N)
-  neighbour4 = compute_neighbours(shift_matrix(potts_data, if (is_proposed) "right" else "left", N), if (is_proposed) proposed_value else neighbour1, N)
-  
-  # Calculating the total neighbours
-  Neighbours_total = neighbour1 + neighbour2 + neighbour3 + neighbour4
-  return(Neighbours_total)
-}
+library(Rcpp)
 
-#lambda equation
+#lambda equation (log(lambda)= B0 + B1*log(distance) +  B2*log(GC) + B3*log(TES)+ B4*log(ACC) as in equation 2 in the paper.
 pred_combined <- function(params, z, x_vars, component, N) {
   # Extract parameters
-  a = params[1]
-  b = params[2]
-  c = params[3]
-  d = params[4]
-  e = params[5]
+  a <- params[1]
+  b <- params[2]
+  c <- params[3]
+  d <- params[4]
+  e <- params[5]
   
   # Create logical mask and subset matrices
-  logical_mask = z == component
-  x1_sub = x_vars[[1]][[1]][logical_mask]
-  x2_sub = x_vars[[2]][[1]][logical_mask]
-  x3_sub = x_vars[[3]][[1]][logical_mask]
-  x4_sub = x_vars[[4]][[1]][logical_mask]
+  logical_mask <- z == component
+  x1_sub <- x_vars[[1]][[1]][logical_mask]
+  x2_sub <- x_vars[[2]][[1]][logical_mask]
+  x3_sub <- x_vars[[3]][[1]][logical_mask]
+  x4_sub <- x_vars[[4]][[1]][logical_mask]
   
   # Compute pred for any component
-  pred = a + b * x1_sub + c * x2_sub + d * x3_sub + e * x4_sub
+  pred <- a + b * log(x1_sub+1) + c * log(x2_sub+1) + d * log(x3_sub+1) + e * log(x4_sub+1)
   return(pred)
 }
 
 
-# Combined likelihood function for different components
-likelihood_combined <- function(pred_combined, params, z, y, x_vars, component, theta,N){
+# Likelihood function for the ZIP distribution
+likelihood_combined <- function(pred_combined, params, z, y, x_vars, component, theta, size, N) {
   # Subset the data based on the component
   yc = y[z == component]
-  # Calculate the likelihood based on the component
+  lambda=pred_combined(params, z, x_vars, component, N)
+  # Calculate the likelihood based on the specified distribution
   if (component == 1) {
-    singlelikelihoods = ifelse(yc == 0, 
-                               log(theta + (1 - theta) * exp(-pred_combined(params, z, x_vars, component, N))), 
-                               log(1 - theta) + dpois(yc, lambda=exp(pred_combined(params, z, x_vars, component, N)), log=T))
-    #s = singlelikelihoods
-    sumll = sum(singlelikelihoods)
-    
-  } else {
-    singlelikelihoods = dpois(yc, lambda = exp(pred_combined(params, z, x_vars,component,N)), log = TRUE)
-    #print(singlelikelihoods)
-    sumll = sum(singlelikelihoods)
-  }
+      singlelikelihoods = ifelse(yc == 0,
+                                 log(theta + (1 - theta) * exp(-lambda)),
+                                 log(1 - theta) + dpois(yc, lambda = exp(lambda), log = TRUE))
+  } else if(component==2 || component==3) {
+      singlelikelihoods = dpois(yc[component], lambda = exp(lambda)[component], log = TRUE)
+     } 
+  sumll = sum(singlelikelihoods)
   return(sumll)
 }
-					       
-# Combined prior function for different components
 
+					       
+# Combined prior function for the sources of biases. wDefault is to use prior from the data, while users can set there priors (example given below).
 prior_combined <- function(params, component, y, x_vars, z, use_data_priors = TRUE, user_fixed_priors) {
   # Extract parameters from the 'params' vector
   a = params[1]
@@ -98,6 +51,9 @@ prior_combined <- function(params, component, y, x_vars, z, use_data_priors = TR
   c = params[3]
   d = params[4]
   e = params[5]
+  
+  # Set a small positive value to avoid using zero or negative standard deviations
+  epsilon = 1e-6
   
   # Subset data based on component if using data-driven priors
   if (use_data_priors) {
@@ -111,20 +67,20 @@ prior_combined <- function(params, component, y, x_vars, z, use_data_priors = TR
     # Data-driven priors: Calculate means and standard deviations from the data
     # Different settings for meany based on the component
     if (component == 1) {
-      inversesdy = rgamma(1,10,100)
+      inversesdy = rgamma(1,10,1000)
       sdy = 1 / inversesdy
-      meany = rnorm(1, 5, sdy/200)  # Use mean of 2 for component 1
-     
+      meany = rnorm(1, 5, sdy/10)  # Use mean of 2 for component 1
+      
     } else if (component == 2) {
       inversesdy = rgamma(1,500,2000000)
       sdy = 1 / inversesdy
       meany = rnorm(1, 700, sdy/10)  # Use mean of 1 for other components
       
     } else{
-      inversesdy = rgamma(1,500,100)
+      inversesdy = rgamma(1,10,10000)
       sdy = 1 / inversesdy
-      meany = rnorm(1, 500, sdy/100)
-     
+      meany = rnorm(1, 10, sdy/10)
+      
     }
     
     inversesdx1 = rgamma(1, (length(x1)-1)/2, sum((x1 - mean(x1))^2)/2)
@@ -182,46 +138,21 @@ prior_combined <- function(params, component, y, x_vars, z, use_data_priors = TR
   return(a_prior + b_prior + c_prior + d_prior + e_prior)
 }
 
-
   
-# Combined posterior function for different components
-posterior_combined <- function(pred_combined, params, z, y, x_vars, component, theta,N,use_data_priors, user_fixed_priors){
-  likelihood = likelihood_combined(pred_combined, params, z, y, x_vars, component, theta,N)
-  prior = prior_combined(params, component, y, x_vars, z,use_data_priors, user_fixed_priors)
-  #print(likelihood)
-  return(likelihood + prior)
+# Combined posterior function for the ZIP distribution.
+posterior_combined <- function(pred_combined, params, z, y, x_vars, component, theta, N,
+                               use_data_priors, user_fixed_priors) {
+  
+  # Compute the likelihood
+  likelihood = likelihood_combined(pred_combined, params, z, y, x_vars, component, theta, N)
+                                   
+  
+  # Compute the prior for the parameters
+  prior = prior_combined(params, component, y, x_vars, z, use_data_priors, user_fixed_priors)
+
+    # Return only likelihood + prior when dist is not "NB" or "ZINB"
+    return(likelihood + prior)
 }
-
-
-
-
-# Combined proposal function for different components
-proposal_function_combined <- function(params, component) {
-  # Define standard deviations for each component
-  sd_values = list(
-    component1 = c(0.007, 0.05, 0.005, 0.05, 0.01),
-    component2 = c(7, 0.5, 0.5, 0.5, 0.1),
-    component3 = c(0.7, 0.02, 0.07, 0.07, 0.07)
-  )
-  
-  # Select the appropriate standard deviations
-  selected_sd = sd_values[[paste0("component", component)]]
-  
-  # Ensure the length of params matches the length of selected_sd
-  if (length(params) != length(selected_sd)) {
-    stop("The length of params does not match the expected length for component ", component, ".")
-  }
-  
-  # Ensure standard deviations are valid (not negative or zero)
-  epsilon = 1e-6  # Small positive value to ensure positivity
-  selected_sd = pmax(selected_sd, epsilon)
-  
-  # Generate and return the new proposal
-  new_proposal = rnorm(length(params), mean = params, sd = selected_sd)
-  return(new_proposal)
-}
-
-
 
 # Combined proposal density function for different components
 proposaldensity_combined <- function(params, component) {
@@ -232,8 +163,14 @@ proposaldensity_combined <- function(params, component) {
     component3 = list(means = c(700, 2, 8, 1, 2), sds = c(2000, 5000, 5000, 2000, 1000))
   )
   
+  # Check if the component is valid
+  component_key <- paste0("component", component)
+  if (!component_key %in% names(densities)) {
+    stop("Invalid component specified: ", component)
+  }
+  
   # Select the appropriate mean and standard deviation values
-  selected_densities = densities[[paste0("component", component)]]
+  selected_densities = densities[[component_key]]
   means = selected_densities$means
   sds = selected_densities$sds
   
@@ -254,7 +191,13 @@ proposaldensity_combined <- function(params, component) {
   return(sum_proposaldensity)
 }
 
+#Likelihood for the Potts model (used in updating the interaction parameter (gamma) within the Potts model).
 likelihood_gamma <- function(x, pair_neighbours_DA_x1, N) {
+  # Validate input dimensions
+  if (length(x) != length(pair_neighbours_DA_x1)) {
+    stop("x and pair_neighbours_DA_x1 must have the same length.")
+  }
+  
   # Step 1: Calculate max value for numerical stability
   max_val <- max(x * pair_neighbours_DA_x1)
   
@@ -286,306 +229,401 @@ gamma_prior_value <- function() {
   rbeta(1, 10, 5)
 }
 
+####c++ codes####
+######2D Neighbours for the sufficient statistic in the Potts model
+# Combined function for 2D Neighbours in the Potts model
 
-pz_123 <- function(z, sum_neighbours, y, pred_combined, chains, chain_gamma, x_vars, theta, N, iter) {
-  # Initialize a matrix to store probabilities for all z values
-  prob_sum <- matrix(0, nrow = N, ncol = N)
+cppFunction('
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// Helper function to create shifted matrices
+NumericMatrix shift_matrix(const NumericMatrix& data, std::string shift_direction, int N) {
+  NumericMatrix shifted(N, N);
   
-  # Define a small value for clipping to avoid log(0)
-  epsilon <- 1e-6
+  if (shift_direction == "down") {
+    for (int i = 1; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        shifted(i, j) = data(i - 1, j);
+      }
+    }
+  } else if (shift_direction == "up") {
+    for (int i = 0; i < N - 1; i++) {
+      for (int j = 0; j < N; j++) {
+        shifted(i, j) = data(i + 1, j);
+      }
+    }
+  } else if (shift_direction == "right") {
+    for (int i = 0; i < N; i++) {
+      for (int j = 1; j < N; j++) {
+        shifted(i, j) = data(i, j - 1);
+      }
+    }
+  } else if (shift_direction == "left") {
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N - 1; j++) {
+        shifted(i, j) = data(i, j + 1);
+      }
+    }
+  }
   
-  # Loop over components
-  for (comp in 1:3) {
-    # Extract y values for the current component based on z
-    y_comp <- y[z == comp]
+  return shifted;
+}
+
+// Helper function to compute neighbours
+NumericMatrix compute_neighbours(const NumericMatrix& data1, const NumericMatrix& compare_matrix, int N) {
+  NumericMatrix result_matrix(N, N);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+      if (data1(i, j) == compare_matrix(i, j)) {
+        result_matrix(i, j) = 1;
+      }
+    }
+  }
+  return result_matrix;
+}
+
+// [[Rcpp::export]]
+NumericMatrix Neighbours_combined(NumericMatrix potts_data, int N, Nullable<NumericMatrix> proposed_value = R_NilValue) {
+  bool is_proposed = proposed_value.isNotNull();
+  NumericMatrix compare_matrix1(N, N);
+  
+  // Determine the shifted matrices and comparison matrix
+  NumericMatrix mydata1 = shift_matrix(potts_data, is_proposed ? "up" : "down", N);
+  if (is_proposed) {
+    compare_matrix1 = as<NumericMatrix>(proposed_value);
+  } else {
+    compare_matrix1 = mydata1;
+  }
+  
+  // Compute neighbour relationships
+  NumericMatrix neighbour1 = compute_neighbours(mydata1, compare_matrix1, N);
+  NumericMatrix neighbour2 = compute_neighbours(shift_matrix(potts_data, is_proposed ? "down" : "up", N), is_proposed ? as<NumericMatrix>(proposed_value) : neighbour1, N);
+  NumericMatrix neighbour3 = compute_neighbours(shift_matrix(potts_data, is_proposed ? "left" : "right", N), is_proposed ? as<NumericMatrix>(proposed_value) : neighbour1, N);
+  NumericMatrix neighbour4 = compute_neighbours(shift_matrix(potts_data, is_proposed ? "right" : "left", N), is_proposed ? as<NumericMatrix>(proposed_value) : neighbour1, N);
+  
+  // Calculating the total neighbours
+  NumericMatrix Neighbours_total(N, N);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+      Neighbours_total(i, j) = neighbour1(i, j) + neighbour2(i, j) + neighbour3(i, j) + neighbour4(i, j);
+    }
+  }
+  
+  return Neighbours_total;
+}
+')
+
+
+#######calculates probabilities for a probabilistic model, combines spatial interaction effects (neighbor dependencies) with the specified statistical distribution (ZIP).
+cppFunction('
+
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// Helper function to get subset indices where z == comp
+std::vector<std::pair<int, int>> get_indices(const NumericMatrix &z, int comp) {
+  std::vector<std::pair<int, int>> indices;
+  for (int i = 0; i < z.nrow(); i++) {
+    for (int j = 0; j < z.ncol(); j++) {
+      if (z(i, j) == comp) {
+        indices.push_back(std::make_pair(i, j));
+      }
+    }
+  }
+  return indices;
+}
+
+// pz_123 function in C++
+// [[Rcpp::export]]
+NumericMatrix pz_123(NumericMatrix z, NumericMatrix sum_neighbours, NumericMatrix y, 
+                     Function pred_combined, List chains, NumericVector gamma_chain, 
+                     List x_vars, double theta, int N, int iter) {
+  NumericMatrix prob_sum(N, N); // Matrix to store probabilities
+  double epsilon = 1e-6;
+
+  // Loop over components
+  for (int comp = 1; comp <= 3; comp++) {
+    // Get subset indices where z == comp
+    std::vector<std::pair<int, int>> indices = get_indices(z, comp);
     
-    # Extract the parameters for the current iteration and component
-    params_comp_current_iter <- chain_gamma[iter]
+    // Extract y_comp and sum_neighbours_comp based on indices
+    NumericVector y_comp(indices.size()), sum_neighbours_comp(indices.size());
+    for (size_t k = 0; k < indices.size(); k++) {
+      int i = indices[k].first;
+      int j = indices[k].second;
+      y_comp[k] = y(i, j);
+      sum_neighbours_comp[k] = sum_neighbours(i, j);
+    }
     
-    # Ensure sum_neighbours is correctly used for each component
-    sum_neighbours_comp <- sum_neighbours[z == comp]
-    chain1 <- chains[[comp]][iter, ]
-    
-    # Calculate component-specific probabilities
+    // Get parameters for current component and iteration
+    double params_comp_current_iter = gamma_chain[iter];
+    NumericVector chain1 = chains[comp - 1];
+    NumericVector pred_values = as<NumericVector>(pred_combined(chain1, z, x_vars, comp, N));
+    NumericVector lambda = exp(pred_values); // Ensure lambda is a vector
+
+    // Compute probabilities based on component
+    NumericVector prob_comp(indices.size());
     if (comp == 1) {
-      # For component 1, calculate probabilities with special handling for y_comp == 0
-      pp <- ifelse(y_comp == 0, 
-                   (theta + (1 - theta) * exp(-pred_combined(chain1, z, x_vars, comp, N))), 
-                   (1 - theta) * dpois(y_comp, lambda = exp(pred_combined(chain1, z, x_vars, comp, N)), log = FALSE))
-      
-      prob_comp <- exp(params_comp_current_iter * sum_neighbours_comp) * pp
+      NumericVector pp(indices.size());
+      for (size_t k = 0; k < indices.size(); k++) {
+        pp[k] = (y_comp[k] == 0) 
+          ? theta + (1 - theta) * exp(-pred_values[k]) 
+          : (1 - theta) * R::dpois(y_comp[k], lambda[k], false);
+      }
+      prob_comp = exp(params_comp_current_iter * sum_neighbours_comp) * pp;
     } else {
-      # For components 2 and 3, directly calculate log-probabilities
-      ps <- dpois(y_comp, lambda = exp(pred_combined(chain1, z, x_vars, comp, N)), log = FALSE)
-      prob_comp <- exp(params_comp_current_iter * sum_neighbours_comp) * ps
+      NumericVector ps(indices.size());
+      for (size_t k = 0; k < indices.size(); k++) {
+        ps[k] = R::dpois(y_comp[k], lambda[k], false);
+      }
+      prob_comp = exp(params_comp_current_iter * sum_neighbours_comp) * ps;
     }
     
-    # Ensure that dimensions are consistent during assignment
-    if (length(prob_comp) == length(prob_sum[z == comp])) {
-      prob_sum[z == comp] <- prob_comp
+    // Assign prob_comp to prob_sum at the correct indices
+    if (prob_comp.size() == indices.size()) {
+      for (size_t k = 0; k < indices.size(); k++) {
+        int i = indices[k].first;
+        int j = indices[k].second;
+        prob_sum(i, j) = prob_comp[k];
+      }
     } else {
-      stop("Dimension mismatch: prob_comp and prob_sum[z == comp] have different lengths.")
+      stop("Dimension mismatch: prob_comp and prob_sum[z == comp] have different lengths.");
     }
   }
   
-  # After loop completion, clip small values in prob_sum to avoid log(0)
-  prob_sum <- pmax(prob_sum, epsilon)
+  // Clip values in prob_sum to avoid log(0)
+  for (int i = 0; i < prob_sum.nrow(); i++) {
+    for (int j = 0; j < prob_sum.ncol(); j++) {
+      prob_sum(i, j) = std::max(prob_sum(i, j), epsilon);
+    }
+  }
   
-  # Return the log of the probabilities
-  return(log(prob_sum))
+  // Take element-wise log of prob_sum and return it as a matrix
+  for (int i = 0; i < prob_sum.nrow(); i++) {
+    for (int j = 0; j < prob_sum.ncol(); j++) {
+      prob_sum(i, j) = std::log(prob_sum(i, j));
+    }
+  }
+  
+  return prob_sum; // Return log of probabilities
 }
 
 
+')
 
-run_metropolis_MCMC_betas <- function(N, gamma_prior, iterations, x_vars, y, theta_start,use_data_priors, user_fixed_priors,epsilon=NULL, epsilon_quantile = 0.01, distance_metric = "manhattan", adaptive_epsilon = TRUE) {
-  # Check and convert y and x_vars to lists if they are single matrices
-  #y<-y_sim1[[1]]
-  #print(dim(y))
-  chains = list(matrix(NA, nrow = (iterations + 1), ncol = 5), 
-                matrix(NA, nrow = (iterations + 1), ncol = 5), 
-                matrix(NA, nrow = (iterations + 1), ncol = 5))
-  
-  chains[[1]][1, ] = runif(5)
-  chains[[2]][1, ] = runif(5)
-  chains[[3]][1, ] = runif(5)
-  
-  chain_gamma = rep(NA, iterations)
-  chain_gamma[1] = gamma_prior
-  
-  # Initialize epsilon history
-  epsilon_history <- numeric()
-  
-  
-  theta = rep(NA, iterations)
-  theta[1] = theta_start
-  z = list(matrix(0, N, N))
-  # Initialize z based on y
-  for (i in 1:N) {
-    for (j in 1:N) {
-      z[[1]][i, j] = if (y[i, j] == 0) 1 else sample(1:3, 1, replace = TRUE)
+
+########Function to run the MCMC chain##########
+cppFunction('
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// Helper function to update theta based on z_current and y
+double update_theta(const NumericMatrix &z_current, const NumericMatrix &y) {
+  int n1 = 0, n0 = 0;
+  for (int i = 0; i < z_current.nrow(); i++) {
+    for (int j = 0; j < z_current.ncol(); j++) {
+      if (z_current(i, j) == 1) {
+        n1++;
+      } else {
+        n0++;
+      }
     }
   }
-  
-  # Initialize acceptance counters and sd_values
-  acceptance_counts = list(0,0,0)
-  sd_values = list(
-    component1 = c(0.7, 0.5, 0.5, 0.5, 0.1),
-    component2 = c(0.7, 0.5, 0.5, 0.5, 0.1),
-    component3 = c(0.7, 0.2, 0.7, 0.7, 0.7)
-  )
-  
-  target_acceptance_rate = 0.3
-  adaptation_interval = 50
-  adaptation_scaling = 1.1
-  
-  
-  for (iter in 1:iterations) {
-    print(paste("Iteration:", iter))
-    # Update z
-    
-    z[[iter+1]]=matrix(0,N,N)
-    Pros1<-matrix(0,N,N)
-    Pros2<-matrix(0,N,N)
-    
-    for(i in 1:N){
-      for(j in 1:N){
-        if(y[i,j]==0){
-          Pros1[i,j]<-1
-        }else{
-          Pros1[i,j]<-sample(1:3,1,replace=T)
-        }
-      }
-    }
-    
-    
-    for(i in 1:N){
-      for(j in 1:N){
-        if(y[i,j]==0){
-          Pros2[i,j]<-1
-        }else{
-          Pros2[i,j]<-sample(1:3,1,replace=T)
-        }
-      }
-    }
-    
-    Pros1 = matrix(sample(1:3, N*N, replace = TRUE), N, N)
-    Pros2 = matrix(sample(1:3, N*N, replace = TRUE), N, N)
-    
-    for (i in 1:N) {
-      for (j in 1:N) {
-        if(y[i,j]>0){
-          while (z[[iter]][i,j]==Pros1[i,j]) {
-            Pros1[i,j]=sample(1:3,1)
-          }
-          while (Pros2[i,j]==z[[iter]][i,j] | Pros2[i,j]==Pros1[i,j]) {
-            Pros2[i,j]=sample(1:3,1)
-          }
-        }
-      }
-    }
-    
-    sum1 = Neighbours_combined(z[[iter]], N)
-    sum2 = Neighbours_combined(z[[iter]], N, Pros1)
-    sum3 = Neighbours_combined(z[[iter]], N, Pros2)
-    
-    
-    P_initials = pz_123(z[[iter]], sum1, y, pred_combined,chains, chain_gamma, x_vars, theta[iter],N,iter)
-    P_proposed1 = pz_123(Pros1, sum2, y, pred_combined, chains, chain_gamma, x_vars, theta[iter],N, iter)
-    P_proposed2 = pz_123(Pros2, sum3, y, pred_combined, chains, chain_gamma, x_vars, theta[iter],N, iter)
-    
-    
-    log_P_initials =  (P_initials )
-    log_P_proposed1 = (P_proposed1)
-    log_P_proposed2 = (P_proposed2)
-    
-    psum = (log_P_initials + log_P_proposed1 + log_P_proposed2)
-    
-    
-    probab1 = exp(log_P_initials) /  exp(psum)
-    probab2 = exp(log_P_proposed1) / exp(psum)
-    probab3 = exp(log_P_proposed2) / exp(psum)
-    
-    
-    for (i in 1:N) {
-      for (j in 1:N) {
-        z[[iter + 1]][i, j] <- ifelse(y[i, j] == 0, 1, sample(1:3, 1, prob = c(probab1[i,j],probab2[i,j],probab3[i,j])))
-      }
-    }
-    
-    
-    # Update chains
-    for (comp in 1:3) {  
-      # Current proposal function with adaptive sd_values
-      proposal = rnorm(5, mean = chains[[comp]][iter, ], sd = sd_values[[paste0("component", comp)]])
-      
-      posterior_current = posterior_combined(pred_combined, chains[[comp]][iter, ], z[[iter + 1]], y, x_vars, comp, theta[iter],N,use_data_priors, user_fixed_priors)
-      posterior_proposal = posterior_combined(pred_combined, proposal, z[[iter + 1]], y, x_vars, comp, theta[iter],N,use_data_priors, user_fixed_priors)
-      
-      proposaldensity_current = proposaldensity_combined(chains[[comp]][iter, ], comp)
-      proposaldensity_proposal = proposaldensity_combined(proposal, comp)
-
-      
-      probab = posterior_proposal - posterior_current + proposaldensity_current - proposaldensity_proposal
-      
-      
-      # Accept or reject the proposal based on its specific probab value
-      if (log(runif(1)) < probab) {
-        chains[[comp]][iter + 1, ] = proposal
-        acceptance_counts[[comp]] = acceptance_counts[[comp]] + 1
-      } else {
-        chains[[comp]][iter + 1, ] = chains[[comp]][iter, ]
-      }
-    }
-    
-    
-    # Adaptive tuning of sd_values
-    if (iter %% adaptation_interval == 0 && iter <= (iterations / 2)) { # Only adapt during burn-in phase
-      for (comp in 1:3) {
-        acceptance_rate = acceptance_counts[[comp]] / adaptation_interval
-        
-        # Adjust sd_values based on acceptance rate
-        if (acceptance_rate < target_acceptance_rate) {
-          # Increase sd to encourage larger proposals
-          sd_values[[paste0("component", comp)]] = sd_values[[paste0("component", comp)]] / adaptation_scaling
-        } else if (acceptance_rate > target_acceptance_rate) {
-          # Decrease sd to encourage more acceptance
-          sd_values[[paste0("component", comp)]] = sd_values[[paste0("component", comp)]] * adaptation_scaling
-        }
-        
-        # Reset acceptance count for the next adaptation interval
-        acceptance_counts[[comp]] = 0
-      }
-    }
-    
-    
-    # Update theta and chain_gamma
-    update_theta <- function(z_current, y) {
-      n1 <- sum(z_current == 1)
-      n0 <- length(y) - n1
-      return(rbeta(1, n1+1, n0 + 1))
-    }
-    
-  
-    update_gamma <- function(pred_combined, gamma_current, y, z_current, N, priorfunction, proposalfunction, x_vars, params, component, epsilon = NULL, epsilon_quantile = 0.01, distance_metric = "manhattan", adaptive_epsilon = TRUE, epsilon_history = NULL, iter) {
-      
-      # Step 1: Simulate a new value of gamma from the proposal distribution
-      gamma_proposed <- proposalfunction()  # Generate a proposal for gamma
-      
-      # Step 2: Compute the Poisson rate (lambda) using the pred_combined function
-      # Ensure that pred_combined returns a value with the correct length based on the component
-      pred_values <- pred_combined(params, z_current, x_vars, component, N)
-      
-      # If the component corresponds to a subset of z_current, ensure pred_values matches the subset size
-      if (length(pred_values) != length(z_current[z_current == component])) {
-        stop("Length of pred_values does not match the subset size of z_current for the given component.")
-      }
-      
-      # Create a full prediction matrix for z_current based on the component
-      pred_matrix <- matrix(0, nrow = N, ncol = N)
-      pred_matrix[z_current == component] <- pred_values
-      
-      # Step 3: Introduce neighborhood dependencies using the Potts model
-      neighbours <- Neighbours_combined(z_current, N)  # Compute neighbours for the Potts model
-      potts_prob <- exp(gamma_proposed * neighbours)  # Neighborhood influence term
-      
-      # Modify lambda to introduce neighbor dependency
-      lambda_modified <- exp(pred_matrix) * potts_prob  # Adjusted lambda
-      
-      # Step 4: Simulate synthetic data from the Poisson distribution
-      synthetic_data <- rpois(length(y), lambda = lambda_modified)  # Simulate data with modified lambda
-      
-      # Step 5: Compute the distance metric between observed and synthetic data
-      if (distance_metric == "euclidean") {
-        distance <- sqrt(sum((y - synthetic_data)^2))  # Euclidean distance
-      } else if (distance_metric == "manhattan") {
-        distance <- sum(abs(y - synthetic_data))  # Manhattan distance
-      } else {
-        stop("Unsupported distance metric. Use 'euclidean' or 'manhattan'.")
-      }
-      
-      # Step 6: Set the tolerance (epsilon) for ABC
-      if (adaptive_epsilon) {
-        # Initialize epsilon_history if it's NULL
-        if (is.null(epsilon_history)) {
-          epsilon_history <- numeric()  # Use numeric() instead of list() to maintain atomic structure
-        }
-        
-        # Ensure epsilon_history is growing correctly by adding the new distance
-        epsilon_history[iter] <- distance  # Assign the current distance to the current iteration index
-        
-        # Update epsilon history
-        epsilon_history <- c(epsilon_history, distance)  # Concatenate new distance to the epsilon history
-        
-        # Calculate epsilon based on quantile from the history
-        epsilon <- quantile(epsilon_history, epsilon_quantile)
-      } else {
-        # Set epsilon based on the current distance if no history
-        if (is.null(epsilon)) {
-          epsilon <- mean(y) * 0.1
-        }
-      }
-      # Step 7: Accept or reject the proposed gamma based on the distance
-      if (distance < epsilon) {
-        return(list(gamma = gamma_proposed, epsilon_history = epsilon_history))  # Accept the proposed gamma
-      } else {
-        return(list(gamma = gamma_proposed, epsilon_history = epsilon_history))  # Reject and keep the current gamma
-      }
-    }
-    
-    # Update gamma using ABC
-    result_gamma<-update_gamma(pred_combined,chain_gamma[iter], y, z[[iter]], N, gamma_prior_value,proposalfunction, x_vars, chains[[comp]][iter, ],comp, epsilon=NULL, epsilon_quantile = 0.01, distance_metric = "manhattan", adaptive_epsilon = TRUE, epsilon_history = NULL)
-    
-    theta[iter + 1] = update_theta(z[[iter]], y)
-    chain_gamma[iter + 1] = result_gamma$gamma
-    epsilon_history <- result_gamma$epsilon_history
-  }
-  
-  return(list(
-    chains=chains,
-    gamma=chain_gamma,
-    theta=theta
-  ))
+  return R::rbeta(n1 + 1, n0 + 1);
 }
+
+// [[Rcpp::export]]
+List run_metropolis_MCMC_betas(int N, double gamma_prior, int iterations, 
+                               List x_vars, NumericMatrix y, bool use_data_priors,
+                               Nullable<List> user_fixed_priors = R_NilValue, 
+                               double epsilon = 0.01, std::string distance_metric = "manhattan", Nullable<double> theta_start = R_NilValue) {
+  
+   // Map x1, x2, x3, and x4 to distance, GC, TES, and ACC
+  List x1 = x_vars["distance"];
+  List x2 = x_vars["GC"];
+  List x3 = x_vars["TES"];
+  List x4 = x_vars["ACC"];
+
+  // Initialize chains and other variables
+  List chains = List::create(NumericMatrix(iterations + 1, 5), 
+                             NumericMatrix(iterations + 1, 5), 
+                             NumericMatrix(iterations + 1, 5));
+  // Initialize separate gamma chains
+  NumericVector gamma_chain(iterations + 1, NA_REAL);
+  gamma_chain[0] = gamma_prior; // Initialize with gamma_prior
+
+  NumericVector theta(iterations + 1, NA_REAL);
+  theta[0] = as<double>(theta_start);
+  
+  // Initialize acceptance counts and standard deviations for components 1, 2, and 3
+  std::vector<int> acceptance_counts = {0, 0, 0};
+  List sd_values = List::create(NumericVector::create(70, 50, 50, 50, 10), 
+                                NumericVector::create(70, 50, 50, 50, 10), 
+                                NumericVector::create(70, 20, 70, 70, 70));
+
+  // Initialize z with zeros and setup function calls to R
+  List z;
+  z.push_back(NumericMatrix(N, N));
+  Function Neighbours_combined("Neighbours_combined");
+  Function pred_combined("pred_combined");
+  Function pz_123("pz_123");
+  Function gamma_prior_value("gamma_prior_value");
+  Function posterior_combined("posterior_combined");
+  Function proposaldensity_combined("proposaldensity_combined");
+  Function likelihood_gamma("likelihood_gamma");
+  
+  // Initialize first z values based on y
+  NumericMatrix z_current = as<NumericMatrix>(z[0]);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+      if (y(i, j) == 0) {
+        z_current(i, j) = 1;
+      } else {
+        z_current(i, j) = floor(R::runif(1, 4));
+      }
+    }
+  }
+  z[0] = z_current;
+
+  for (int iter = 0; iter < iterations; iter++) {
+    Rcout << "Iteration: " << iter + 1 << std::endl;
+    
+    // Initialize Pros matrices and fill them based on y and z_current
+    NumericMatrix Pros1(N, N), Pros2(N, N);
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        if (y(i, j) == 0) {
+          Pros1(i, j) = 1;
+          Pros2(i, j) = 1;
+        } else {
+          do {
+            Pros1(i, j) = floor(R::runif(1, 4));
+          } while (Pros1(i, j) == z_current(i, j));
+          
+          do {
+            Pros2(i, j) = floor(R::runif(1, 4));
+          } while (Pros2(i, j) == z_current(i, j) || Pros2(i, j) == Pros1(i, j));
+        }
+      }
+    }
+    
+    // Call Neighbours_combined and pz_123 to compute probabilities
+    NumericMatrix sum1 = Neighbours_combined(z_current, N);
+    NumericMatrix sum2 = Neighbours_combined(z_current, N, Pros1);
+    NumericMatrix sum3 = Neighbours_combined(z_current, N, Pros2);
+    
+    NumericMatrix P_initials = pz_123(z_current, sum1, y, pred_combined, chains, gamma_chain, x_vars, theta[iter], N, iter);
+    NumericMatrix P_proposed1 = pz_123(Pros1, sum2, y, pred_combined, chains, gamma_chain, x_vars, theta[iter], N, iter);
+    NumericMatrix P_proposed2 = pz_123(Pros2, sum3, y, pred_combined, chains, gamma_chain, x_vars, theta[iter], N, iter);
+    
+    // Compute probabilities for sampling next z
+    NumericMatrix z_next(N, N);
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        double psum = exp(P_initials(i, j)) + exp(P_proposed1(i, j)) + exp(P_proposed2(i, j));
+        if (y(i, j) == 0) {
+          z_next(i, j) = 1;
+        } else {
+          double prob1 = exp(P_initials(i, j)) / psum;
+          double prob2 = exp(P_proposed1(i, j)) / psum;
+          double random_val = R::runif(0, 1);
+          z_next(i, j) = (random_val < prob1) ? 1 : ((random_val < prob1 + prob2) ? 2 : 3);
+        }
+      }
+    }
+    z.push_back(z_next);
+    
+    // MCMC proposal
+    for (int comp = 1; comp <= 3; comp++) {  // Adjusted to comp = 1, 2, 3
+      NumericMatrix chain_matrix = chains[comp - 1];  // Adjust to match comp indexing (1,2,3 -> 0,1,2 in chains)
+      NumericVector proposal(5);
+
+      for (int j = 0; j < 5; j++) {
+        proposal[j] = R::rnorm(chain_matrix(iter, j), 1.0);
+      }
+      
+      double posterior_current = as<double>(posterior_combined(pred_combined, chain_matrix(iter, _), z_next, y, x_vars, comp, theta[iter], N, use_data_priors, user_fixed_priors));
+      double posterior_proposal = as<double>(posterior_combined(pred_combined, proposal, z_next, y, x_vars, comp, theta[iter], N, use_data_priors, user_fixed_priors));
+      
+      double probab = posterior_proposal - posterior_current;
+      if (log(R::runif(0, 1)) < probab) {
+        for (int j = 0; j < 5; j++) {
+          chain_matrix(iter + 1, j) = proposal[j];
+        }
+      } else {
+        for (int j = 0; j < 5; j++) {
+          chain_matrix(iter + 1, j) = chain_matrix(iter, j);
+        }
+      }
+    }
+
+    // Update theta and gamma using defined functions
+    theta[iter + 1] = update_theta(z_next, y);
+    
+    // --- ABC for updating gamma ---
+    // Step 1: Propose a new gamma
+    double gamma_current = gamma_chain[iter];
+    double gamma_proposed = as<double>(gamma_prior_value());
+
+    NumericMatrix gamma_matrix(N, N); // Initialize an empty N x N matrix
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        gamma_matrix(i, j) = gamma_current; // Fill all elements with gamma_current
+      }
+    }
+
+   // Step 2: Compute lambda using likelihood_gamma
+    NumericMatrix neighbours = Neighbours_combined(z_current, N);
+    NumericMatrix lambda_matrix = likelihood_gamma(gamma_matrix, neighbours, N);
+
+    // Step 3: Simulate synthetic data
+    NumericMatrix synthetic_data(N, N);
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        synthetic_data(i, j) = R::rpois(lambda_matrix(i, j));
+      }
+    }
+
+    // Step 4: Compute distance metric (absolute difference of means)
+      double mean_y = mean(y);
+      double mean_y_data = mean(synthetic_data);
+      //double distance = std::abs(mean_y - mean_y_data);
+
+
+    // Step 5: Compute distance between observed and synthetic data
+    double distance = 0.0;
+    if (distance_metric == "manhattan") {
+      for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+          distance += std::abs(mean_y - mean_y_data);
+        }
+      }
+    } else if (distance_metric == "euclidean") {
+      for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+          distance += std::pow(abs(mean_y - mean_y_data), 2);
+        }
+      }
+      distance = std::sqrt(distance);
+    } else {
+      stop("Unsupported distance metric. Use manhattan or euclidean.");
+    }
+
+    // Step 7: Accept or reject gamma based on distance
+    
+    if (distance < epsilon) {
+      gamma_chain[iter + 1] = gamma_proposed;
+    } else {
+      gamma_chain[iter + 1] = gamma_current;
+    }
+  }
+  
+  return List::create(Named("chains") = chains, Named("gamma") = gamma_chain, Named("theta") = theta);
+}
+
+')
+
 
 		     
 
@@ -596,16 +634,16 @@ sim_data=sample_data
 
 y_dat=sim_data$interaction
 
-x111=log(abs(sim_data$end.j.-sim_data$start.i.)+1)
+x111=abs(sim_data$end.j.-sim_data$start.i.)
 
-x222=log(sim_data$GC+1)
+x222=sim_data$GC
 
-x333=log(sim_data$Tes+1)
+x333=sim_data$Tes
 
-x444=log(sim_data$Acc+1)
+x444=sim_data$Acc
 
 
-N=floor(sqrt(nrow(sim_data)))      ##### that is the square-root
+N=floor(sqrt(nrow(sim_data)))    
 
 
 ######covert the data to a symmetric matrix##########
@@ -649,28 +687,23 @@ gamma_prior=rbeta(1,10,5)
 iterations=20000
 
  #####run the chain###########
-#####run the chain###########
 chain_betas1 = mcmapply(
   FUN = run_metropolis_MCMC_betas,
-  N = rep(N, 1),  # Assuming 'times' is the number of times you want to run the function
+  N = rep(N, 1),  # 'times' is the number of times you want to run the function
   gamma_prior = rep(gamma_prior, 1),
   iterations = rep(iterations, 1),
   MoreArgs = list(
-    x_vars = list(x1 = a, x2 = b, x3 = c, x4 = d),
-    y = y_sim1[[1]],
-    theta_start = thetap,
+    x_vars = list(distance = a, GC = b, TES = c, ACC = d),
+    y = scaled_data[[1]],
     use_data_priors=TRUE, 
-    user_fixed_priors=0,
-    epsilon = NULL,
-    epsilon_quantile = 0.01, 
-    distance_metric = "manhattan", 
-    adaptive_epsilon = TRUE
+    user_fixed_priors=NULL,
+    epsilon = 0.01,
+    distance_metric = "manhattan",
+    theta_start = thetap
   ),
   SIMPLIFY = FALSE,
   mc.cores = 1  # Or set to the desired number of cores
 )
-
-
 
 #########Example of how to specify the prior in the user_fixed_prior option############
 user_fixed_priors <- list(
