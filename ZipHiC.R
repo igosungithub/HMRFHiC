@@ -679,10 +679,16 @@ c=acc[c(1)]
 d=add[c(1)]
 y_sim1=y1[c(1)]
 
+min_val <- min(y_sim1[[1]])
+max_val <- max(y_sim1[[1]])
+scaled_data <- round((y_sim1[[1]] - min_val) / (max_val - min_val) * (500 - 1) + 1)  # Scaling to range [1, 500]
+scaled_data=list(scaled_data)
+
+
 thetap=0.6
 
 gamma_prior=rbeta(1,10,5)
-iterations=20000
+iterations=20000  ######can be increased based on users preference.
 
  #####run the chain###########
 chain_betas1 = mcmapply(
@@ -692,7 +698,8 @@ chain_betas1 = mcmapply(
   iterations = rep(iterations, 1),
   MoreArgs = list(
     x_vars = list(distance = a, GC = b, TES = c, ACC = d),
-    y = scaled_data[[1]],
+    y = y_sim1[[1]],
+    #y = scaled_data[[1]],
     use_data_priors=TRUE, 
     user_fixed_priors=NULL,
     epsilon = 0.01,
