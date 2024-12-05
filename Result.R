@@ -32,6 +32,16 @@ zip_prob <- function(y, lambda, theta) {
   )
 }
 
+#####If the interaction data used is rescaled#####
+#min_val <- min(y_dat)
+#max_val <- max(y_dat)
+#scaled_data <- round((y_dat - min_val) / (max_val - min_val) * (500 - 1) + 1)  # Scaling to range [1, 500]
+
+prob1=zip_prob(scaled_data,exp(lambda_1),theta)
+prob2=dpois(scaled_data,exp(lambda_2),log=T)
+prob3=dpois(scaled_data,exp(lambda_3),log=T)
+
+
 
 prob1=zip_prob(y_dat,exp(lambda_1),theta)
 prob2=dpois(y_dat,exp(lambda_2),log=T)
