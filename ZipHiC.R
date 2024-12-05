@@ -630,20 +630,18 @@ List run_metropolis_MCMC_betas(int N, double gamma_prior, int iterations,
 #########load the data######
 #sample_data <- read.csv("~/Download/sample_data.csv")
 
-sim_data=sample_data
+y_dat=sample_data$interaction
 
-y_dat=sim_data$interaction
+x111=abs(sample_data$end.j.-sample_data$start.i.)
 
-x111=abs(sim_data$end.j.-sim_data$start.i.)
+x222=sample_data$GC
 
-x222=sim_data$GC
+x333=sample_data$Tes
 
-x333=sim_data$Tes
-
-x444=sim_data$Acc
+x444=sample_data$Acc
 
 
-N=floor(sqrt(nrow(sim_data)))    
+N=floor(sqrt(nrow(sample_data)))    
 
 
 ######covert the data to a symmetric matrix##########
